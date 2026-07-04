@@ -17,6 +17,7 @@ export default defineConfig({
         'index': path.resolve(__dirname, './assets/js/index.js'),
         'hello': path.resolve(__dirname, './assets/js/hello.jsx'),
         'style': path.resolve(__dirname, './assets/styles/style.css'),
+        'main': path.resolve(__dirname, './assets/Page/Main.tsx'),
       },
       output: {
         // Output JS bundles to js/ directory with -bundle suffix
