@@ -167,3 +167,7 @@ CACHES = {
         "TIMEOUT": REGEX_CACHE_TTL,
     }
 }
+
+# This is where uploaded files are stored
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"

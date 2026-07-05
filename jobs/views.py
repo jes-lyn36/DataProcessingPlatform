@@ -2,28 +2,43 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
+from .models import Job
+from .tasks import process_job
+
 
 class JobCreateView(APIView):
   def post(self, request):
-    # Get uploaded file
-    file = request.FILES["file"]
+    file = request.FILES.get("file")
+    prompt = request.data.get("prompt")
 
-    # Get other form fields
-    prompt = request.data["prompt"]
-    replacement = request.data["replacement"]
-    columns = request.data["columns"]
+    if not file:
+      return Response(
+        {"error": "file is required"},
+        status=status.HTTP_400_BAD_REQUEST,
+      )
 
-    # Save file
-    
+    if not prompt:
+      return Response(
+        {"error": "prompt is required"},
+        status=status.HTTP_400_BAD_REQUEST,
+      )
+
+    job = Job.objects.create(
+      uploaded_file=file,
+      natural_language_instruction=prompt,
+      status=Job.Status.QUEUED,
+    )
 
     # Generate regex pattern
-    # Create Job
-    # Dispatch Celery task
+
+    async_result = process_job.delay(str(job.id))
+    job.celery_task_id = async_result.id
+    job.save(update_fields=["celery_task_id"])
 
     return Response(
       {
-        "jobId": "123",
-        "status": "QUEUED",
+        "jobId": str(job.id),
+        "status": job.status,
       },
       status=status.HTTP_202_ACCEPTED,
     )
