@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -77,12 +78,24 @@ WSGI_APPLICATION = "processing_platform.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+if os.environ.get("POSTGRES_HOST"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("POSTGRES_DB", "postgres"),
+            "USER": os.environ.get("POSTGRES_USER", "postgres"),
+            "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "postgres"),
+            "HOST": os.environ["POSTGRES_HOST"],
+            "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 
 # Password validation
@@ -130,4 +143,27 @@ DJANGO_VITE = {
   "default": {
     "dev_mode": True
   }
+}
+
+# Redis DB 0 — Celery message broker and result backend
+CELERY_BROKER_URL = os.environ.get(
+    "CELERY_BROKER_URL",
+    os.environ.get("CELERY_BROKER", "redis://redis:6379/0"),
+)
+CELERY_RESULT_BACKEND = os.environ.get(
+    "CELERY_RESULT_BACKEND",
+    os.environ.get("CELERY_BACKEND", CELERY_BROKER_URL),
+)
+
+# Redis DB 1 — Django cache (LLM-generated regex patterns keyed by prompt)
+REDIS_CACHE_URL = os.environ.get("REDIS_CACHE_URL", "redis://redis:6379/1")
+REGEX_CACHE_TTL = int(os.environ.get("REGEX_CACHE_TTL", 60 * 60 * 24))  # 24 hours
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_CACHE_URL,
+        "KEY_PREFIX": "processingplatform",
+        "TIMEOUT": REGEX_CACHE_TTL,
+    }
 }

@@ -14,6 +14,9 @@ class JobCreateView(APIView):
     columns = request.data["columns"]
 
     # Save file
+    
+
+    # Generate regex pattern
     # Create Job
     # Dispatch Celery task
 
