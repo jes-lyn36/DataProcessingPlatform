@@ -171,3 +171,5 @@ CACHES = {
 # This is where uploaded files are stored
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")

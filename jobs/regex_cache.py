@@ -12,15 +12,25 @@ def _prompt_cache_key(prompt: str) -> str:
     return f"{REGEX_CACHE_KEY_PREFIX}{digest}"
 
 
-def get_cached_regex(prompt: str) -> str | None:
-    """Return a cached regex pattern for an identical natural-language prompt."""
-    return cache.get(_prompt_cache_key(prompt))
+def get_cached_regex(prompt: str) -> dict | None:
+    """Return a cached regex result for an identical natural-language prompt."""
+    cached = cache.get(_prompt_cache_key(prompt))
+    if not cached:
+        return None
+    if isinstance(cached, dict):
+        return cached
+    return {"regex": cached, "target_columns": []}
 
 
-def set_cached_regex(prompt: str, pattern: str, timeout: int | None = None) -> None:
-    """Cache an LLM-generated regex pattern keyed by the natural-language prompt."""
+def set_cached_regex(prompt: str, result: dict | str, timeout: int | None = None) -> None:
+    """Cache an LLM-generated regex result keyed by the natural-language prompt."""
+    if isinstance(result, str):
+        payload = {"regex": result, "target_columns": []}
+    else:
+        payload = result
+
     cache.set(
         _prompt_cache_key(prompt),
-        pattern,
+        payload,
         timeout=timeout or settings.REGEX_CACHE_TTL,
     )
