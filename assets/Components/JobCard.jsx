@@ -9,9 +9,10 @@ export default function JobCard({
   title = "Find email addresses in Email column and replace them with 'REDACTED'.",
   fileName = "customers_data.xlsx",
   createdAt = "Started 2 minutes ago",
-  status = "RUNNING", // RUNNING | COMPLETED | FAILED | QUEUED
+  status = "RUNNING",
   progress = 63,
   selected = false,
+  onClick,
 }) {
   const statusConfig = {
     RUNNING: {
@@ -26,16 +27,22 @@ export default function JobCard({
       colour: "bg-red-100 text-red-700",
       icon: <CircleX className="h-4 w-4" />,
     },
+    CANCELLED: {
+      colour: "bg-orange-100 text-orange-700",
+      icon: <CircleX className="h-4 w-4" />,
+    },
     QUEUED: {
       colour: "bg-yellow-100 text-yellow-700",
       icon: <Clock className="h-4 w-4" />,
     },
   };
 
-  const current = statusConfig[status];
+  const current = statusConfig[status] || statusConfig.QUEUED;
 
   return (
     <button
+      type="button"
+      onClick={onClick}
       className={`w-full rounded-xl border p-4 text-left transition hover:border-indigo-400 hover:shadow-sm ${
         selected
           ? "border-indigo-500 bg-indigo-50"

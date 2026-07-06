@@ -1,14 +1,15 @@
 from django.urls import path
 from .views import (
-  JobCreateView,
+  JobCollectionView,
   JobStatusView,
   JobResultsView,
   JobCancelView,
 )
 
 urlpatterns = [
+  # GET /api/jobs/
   # POST /api/jobs/
-  path("jobs/", JobCreateView.as_view(), name="create-job"),
+  path("jobs/", JobCollectionView.as_view(), name="jobs"),
 
   # GET /api/jobs/<job_id>/
   path("jobs/<uuid:job_id>/", JobStatusView.as_view(), name="job-status"),

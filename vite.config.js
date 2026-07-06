@@ -5,7 +5,15 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/static/', // This should match Django's settings.STATIC_URL
+  base: '/static/',
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
   build: {
     // Where Vite will save its output files.
     // This should be something in your settings.STATICFILES_DIRS
@@ -17,7 +25,7 @@ export default defineConfig({
         'index': path.resolve(__dirname, './assets/js/index.js'),
         'hello': path.resolve(__dirname, './assets/js/hello.jsx'),
         'style': path.resolve(__dirname, './assets/styles/style.css'),
-        'main': path.resolve(__dirname, './assets/Page/Main.tsx'),
+        'main': path.resolve(__dirname, './assets/Page/Main.jsx'),
       },
       output: {
         // Output JS bundles to js/ directory with -bundle suffix
