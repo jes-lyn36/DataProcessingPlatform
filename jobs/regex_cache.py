@@ -18,16 +18,24 @@ def get_cached_regex(prompt: str) -> dict | None:
     if not cached:
         return None
     if isinstance(cached, dict):
-        return cached
-    return {"regex": cached, "target_columns": []}
+        return {
+            "regex": cached["regex"],
+            "replacement": cached.get("replacement", ""),
+            "target_columns": cached.get("target_columns", []),
+        }
+    return {"regex": cached, "replacement": "", "target_columns": []}
 
 
 def set_cached_regex(prompt: str, result: dict | str, timeout: int | None = None) -> None:
     """Cache an LLM-generated regex result keyed by the natural-language prompt."""
     if isinstance(result, str):
-        payload = {"regex": result, "target_columns": []}
+        payload = {"regex": result, "replacement": "", "target_columns": []}
     else:
-        payload = result
+        payload = {
+            "regex": result["regex"],
+            "replacement": result.get("replacement", ""),
+            "target_columns": result.get("target_columns", []),
+        }
 
     cache.set(
         _prompt_cache_key(prompt),

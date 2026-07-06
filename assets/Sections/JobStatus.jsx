@@ -10,7 +10,7 @@ import ProcessedInfoCard from "../Components/ProcessedInfoCard";
 import { cancelJob, fetchJobStatus } from "../api/jobs";
 import { formatNumber, isActiveStatus, STATUS_STYLES } from "../utils/format";
 
-const POLL_INTERVAL_MS = 2000;
+const POLL_INTERVAL_MS = 1000;
 
 export default function JobStatus({ jobId, onJobUpdated }) {
   const [job, setJob] = useState(null);

@@ -115,8 +115,6 @@ class JobCollectionView(APIView):
       status=Job.Status.QUEUED,
     )
 
-    # Generate regex pattern
-
     async_result = process_job.delay(str(job.id))
     job.celery_task_id = async_result.id
     job.save(update_fields=["celery_task_id"])

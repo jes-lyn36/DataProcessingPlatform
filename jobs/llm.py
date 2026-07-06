@@ -1,37 +1,45 @@
 import json
+# import logging
 import re
 
 from django.conf import settings
 from openai import OpenAI
+
+# logger = logging.getLogger(__name__)
 
 FEW_SHOT_MESSAGES = [
   {
     "role": "system",
     "content": (
       "You are a regex generation assistant.\n\n"
-      "Your task is to convert a user's natural language instruction into a regular expression.\n\n"
+      "Your task is to convert a user's natural language instruction into a regular expression "
+      "and an optional replacement string.\n\n"
       "Rules:\n"
       "- Return ONLY valid JSON.\n"
       "- Do not include explanations or markdown.\n"
-      "- Generate a regex that satisfies the user's request.\n"
+      "- Generate a regex that matches the text the user wants to find or replace.\n"
+      "- Set replacement to the value the user wants to substitute matched text with.\n"
+      "- If the user only wants to find matches with no replacement, set replacement to \"\".\n"
       "- If a target column is explicitly mentioned, include it.\n"
       "- If no target column is mentioned, return an empty list.\n"
-      "- Never include replacement values in the regex.\n\n"
+      "- Never include replacement values inside the regex pattern.\n\n"
       "Return this exact format:\n\n"
       "{\n"
       '  "regex": "<generated_regex>",\n'
+      '  "replacement": "<replacement_string>",\n'
       '  "target_columns": ["column1", "column2"]\n'
       "}"
     ),
   },
   {
     "role": "user",
-    "content": "Find email addresses in the Email column.",
+    "content": "Find email addresses in the Email column and replace them with 'REDACTED'.",
   },
   {
     "role": "assistant",
     "content": json.dumps({
       "regex": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,7}\b",
+      "replacement": "REDACTED",
       "target_columns": ["Email"],
     }),
   },
@@ -43,6 +51,7 @@ FEW_SHOT_MESSAGES = [
     "role": "assistant",
     "content": json.dumps({
       "regex": r"(?:\+61|0)[2-478](?:[ -]?\d){8}",
+      "replacement": "",
       "target_columns": [],
     }),
   },
@@ -72,8 +81,15 @@ def _parse_llm_response(content: str) -> dict:
   if not isinstance(target_columns, list):
     raise ValueError("LLM response target_columns must be a list")
 
+  replacement = payload.get("replacement", "")
+  if replacement is None:
+    replacement = ""
+  if not isinstance(replacement, str):
+    raise ValueError("LLM response replacement must be a string")
+
   return {
     "regex": validate_regex(payload["regex"]),
+    "replacement": replacement,
     "target_columns": target_columns,
   }
 
@@ -108,5 +124,7 @@ def generate_regex(prompt: str) -> dict:
   content = chat_completion.choices[0].message.content
   if not content:
     raise ValueError("LLM returned an empty response")
+
+  # logger.info("LLM raw response: %s", content)
 
   return _parse_llm_response(content)
