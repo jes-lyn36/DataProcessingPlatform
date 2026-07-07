@@ -3,6 +3,7 @@ from .views import (
   JobCollectionView,
   JobStatusView,
   JobResultsView,
+  JobDownloadView,
   JobCancelView,
 )
 
@@ -19,6 +20,13 @@ urlpatterns = [
     "jobs/<uuid:job_id>/results/",
     JobResultsView.as_view(),
     name="job-results",
+  ),
+
+  # GET /api/jobs/<job_id>/download/
+  path(
+    "jobs/<uuid:job_id>/download/",
+    JobDownloadView.as_view(),
+    name="job-download",
   ),
 
   # POST /api/jobs/<job_id>/cancel/

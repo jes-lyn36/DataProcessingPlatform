@@ -1,10 +1,12 @@
 from __future__ import absolute_import, unicode_literals
 
+import os
 import shutil
 import tempfile
 from pathlib import Path
 
 from celery import shared_task
+from celery.signals import worker_process_init
 from django.core.files.base import File
 from django.utils import timezone
 from pyspark.sql.functions import col, regexp_replace
@@ -16,8 +18,29 @@ from .regex_cache import get_cached_regex, set_cached_regex
 _spark = None
 
 
+def _stop_spark() -> None:
+  global _spark
+  if _spark is not None:
+    try:
+      _spark.stop()
+    except Exception:
+      pass
+  _spark = None
+
+
+def _is_spark_alive(spark) -> bool:
+  try:
+    jsc = spark.sparkContext._jsc
+    return jsc is not None and not jsc.sc().isStopped()
+  except Exception:
+    return False
+
+
 def get_spark():
   global _spark
+  if _spark is not None and not _is_spark_alive(_spark):
+    _stop_spark()
+
   if _spark is None:
     from pyspark.sql import SparkSession
 
@@ -28,6 +51,11 @@ def get_spark():
       .getOrCreate()
     )
   return _spark
+
+
+@worker_process_init.connect
+def _reset_spark_on_worker_start(**kwargs):
+  _stop_spark()
 
 # Figures out which DataFrame columns to run the regex on, using the LLM’s 
 # target_columns list and the actual column names from the uploaded file.
@@ -45,6 +73,30 @@ def _resolve_target_columns(df_columns: list[str], target_columns: list[str]) ->
     resolved.append(actual)
 
   return resolved
+
+
+MAX_PARTITIONS = 200
+
+
+def _target_partition_count(total_rows: int) -> int:
+  if total_rows < 2:
+    return 1
+
+  row_based = total_rows // 2
+  hardware_cap = (os.cpu_count() or 4) * 2
+  return min(row_based, hardware_cap, MAX_PARTITIONS)
+
+
+def _repartition_for_row_count(df, total_rows: int):
+  target_partitions = _target_partition_count(total_rows)
+  current_partitions = df.rdd.getNumPartitions()
+
+  if current_partitions > target_partitions:
+    df = df.coalesce(target_partitions)
+  elif current_partitions < target_partitions:
+    df = df.repartition(target_partitions)
+
+  return df, target_partitions
 
 
 def _read_dataframe(spark, file_path: str):
@@ -109,7 +161,7 @@ def _process_uploaded_file(job: Job, spark, llm_result: dict) -> None:
 
   df = _read_dataframe(spark, input_path)
   total_rows = df.count()
-  total_partitions = df.rdd.getNumPartitions()
+  df, total_partitions = _repartition_for_row_count(df, total_rows)
 
   job.total_rows = total_rows
   job.total_partitions = total_partitions
@@ -185,6 +237,7 @@ def process_job(self, job_id):
     _process_uploaded_file(job, spark, llm_result)
 
   except Exception as exc:
+    _stop_spark()
     job.status = Job.Status.FAILED
     job.error_message = str(exc)
     job.current_step = "Failed during processing"

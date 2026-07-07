@@ -47,6 +47,10 @@ export async function fetchJobResults(jobId, page = 1, pageSize = 7) {
   return handleResponse(response);
 }
 
+export function getJobDownloadUrl(jobId) {
+  return `${API_BASE}/jobs/${jobId}/download/`;
+}
+
 export async function cancelJob(jobId) {
   const response = await fetch(`${API_BASE}/jobs/${jobId}/cancel/`, {
     method: "POST",

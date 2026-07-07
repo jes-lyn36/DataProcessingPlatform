@@ -5,7 +5,7 @@ import {
   Download,
 } from "lucide-react";
 
-import { fetchJobResults, fetchJobStatus } from "../api/jobs";
+import { fetchJobResults, fetchJobStatus, getJobDownloadUrl } from "../api/jobs";
 import { formatNumber } from "../utils/format";
 
 export default function ResultPreview({ jobId }) {
@@ -77,6 +77,25 @@ export default function ResultPreview({ jobId }) {
   const totalPages = results?.totalPages || 0;
   const startIndex = (currentPage - 1) * rowsPerPage;
 
+  const visiblePages = (() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const pages = new Set([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+    return [...pages]
+      .filter((page) => page >= 1 && page <= totalPages)
+      .sort((a, b) => a - b);
+  })();
+
+  const paginationItems = visiblePages.reduce((items, page, index) => {
+    if (index > 0 && page - visiblePages[index - 1] > 1) {
+      items.push(`gap-${visiblePages[index - 1]}`);
+    }
+    items.push(page);
+    return items;
+  }, []);
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white px-6 pt-4 pb-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between">
@@ -92,7 +111,12 @@ export default function ResultPreview({ jobId }) {
 
         <button
           type="button"
-          disabled={!results || rows.length === 0}
+          onClick={() => {
+            if (jobId) {
+              window.location.href = getJobDownloadUrl(jobId);
+            }
+          }}
+          disabled={!jobId || !results || rows.length === 0}
           className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Download className="h-4 w-4" />
@@ -192,24 +216,26 @@ export default function ResultPreview({ jobId }) {
                 <ChevronLeft className="h-5 w-5" />
               </button>
 
-              {Array.from({ length: totalPages }, (_, index) => {
-                const page = index + 1;
-
-                return (
+              {paginationItems.map((item) =>
+                typeof item === "string" ? (
+                  <span key={item} className="px-1 text-xs text-slate-400">
+                    ...
+                  </span>
+                ) : (
                   <button
-                    key={page}
+                    key={item}
                     type="button"
-                    onClick={() => setCurrentPage(page)}
+                    onClick={() => setCurrentPage(item)}
                     className={`rounded-lg px-4 py-2 text-xs transition ${
-                      currentPage === page
+                      currentPage === item
                         ? "bg-indigo-600 font-semibold text-white"
                         : "border border-slate-300 hover:bg-slate-100"
                     }`}
                   >
-                    {page}
+                    {item}
                   </button>
-                );
-              })}
+                )
+              )}
 
               <button
                 type="button"

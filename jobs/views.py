@@ -1,6 +1,7 @@
 import csv
 
 from celery import current_app
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -190,6 +191,32 @@ class JobResultsView(APIView):
         "totalPages": total_pages,
       },
       status=status.HTTP_200_OK,
+    )
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class JobDownloadView(APIView):
+  def get(self, request, job_id):
+    job = get_object_or_404(Job, id=job_id)
+
+    if job.status != Job.Status.SUCCESS:
+      return Response(
+        {"error": "Job is not yet complete"},
+        status=status.HTTP_409_CONFLICT,
+      )
+
+    if not job.processed_file:
+      return Response(
+        {"error": "Processed file is not available"},
+        status=status.HTTP_404_NOT_FOUND,
+      )
+
+    filename = job.processed_file.name.rsplit("/", 1)[-1]
+    return FileResponse(
+      job.processed_file.open("rb"),
+      as_attachment=True,
+      filename=filename,
+      content_type="text/csv",
     )
 
 
