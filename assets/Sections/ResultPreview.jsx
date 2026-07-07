@@ -19,7 +19,7 @@ export default function ResultPreview({ jobId }) {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const rowsPerPage = 7;
+  const rowsPerPage = 10;
 
   useEffect(() => {
     setCurrentPage(1);
@@ -99,7 +99,7 @@ export default function ResultPreview({ jobId }) {
   const startIndex = (currentPage - 1) * rowsPerPage;
 
   const visiblePages = (() => {
-    if (totalPages <= 7) {
+    if (totalPages <= 10) {
       return Array.from({ length: totalPages }, (_, index) => index + 1);
     }
 
