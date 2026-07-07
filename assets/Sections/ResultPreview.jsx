@@ -6,12 +6,16 @@ import {
 } from "lucide-react";
 
 import { fetchJobResults, fetchJobStatus, getJobDownloadUrl } from "../api/jobs";
-import { formatNumber } from "../utils/format";
+import JobErrorAlert from "../Components/JobErrorAlert";
+import { formatNumber, isActiveStatus } from "../utils/format";
+
+const POLL_INTERVAL_MS = 1000;
 
 export default function ResultPreview({ jobId }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [results, setResults] = useState(null);
   const [jobStatus, setJobStatus] = useState(null);
+  const [jobErrorMessage, setJobErrorMessage] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -25,14 +29,15 @@ export default function ResultPreview({ jobId }) {
     if (!jobId) {
       setResults(null);
       setJobStatus(null);
+      setJobErrorMessage(null);
       setError(null);
       return;
     }
 
     let isMounted = true;
+    let intervalId = null;
 
     const loadResults = async () => {
-      setIsLoading(true);
       setError(null);
 
       try {
@@ -42,12 +47,24 @@ export default function ResultPreview({ jobId }) {
         }
 
         setJobStatus(status.status);
+        setJobErrorMessage(status.errorMessage || null);
 
         if (status.status !== "COMPLETED") {
           setResults(null);
+
+          if (!isActiveStatus(status.status) && intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
           return;
         }
 
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+
+        setIsLoading(true);
         const data = await fetchJobResults(jobId, currentPage, rowsPerPage);
         if (isMounted) {
           setResults(data);
@@ -65,9 +82,13 @@ export default function ResultPreview({ jobId }) {
     };
 
     loadResults();
+    intervalId = setInterval(loadResults, POLL_INTERVAL_MS);
 
     return () => {
       isMounted = false;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
     };
   }, [jobId, currentPage]);
 
@@ -134,7 +155,11 @@ export default function ResultPreview({ jobId }) {
         <p className="text-sm text-slate-500">Loading results...</p>
       )}
 
-      {jobId && !isLoading && jobStatus && jobStatus !== "COMPLETED" && (
+      <JobErrorAlert
+        message={jobStatus === "FAILED" ? jobErrorMessage : null}
+      />
+
+      {jobId && !isLoading && jobStatus && jobStatus !== "COMPLETED" && jobStatus !== "FAILED" && (
         <p className="text-sm text-slate-500">
           Results will appear here once processing completes.
         </p>
@@ -148,14 +173,14 @@ export default function ResultPreview({ jobId }) {
 
       {results && (
         <>
-          <div className="overflow-hidden rounded-xl border border-slate-200">
-            <table className="w-full text-left">
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-full text-left">
               <thead className="bg-slate-50">
                 <tr>
                   {headers.map((header) => (
                     <th
                       key={header}
-                      className="border-b border-slate-200 px-5 py-3 text-xs font-semibold text-slate-700"
+                      className="whitespace-nowrap border-b border-slate-200 px-5 py-3 text-xs font-semibold text-slate-700"
                     >
                       {header}
                     </th>
@@ -180,7 +205,7 @@ export default function ResultPreview({ jobId }) {
                       className="border-b border-slate-100 transition hover:bg-slate-50"
                     >
                       {headers.map((header) => (
-                        <td key={header} className="px-5 py-4 text-xs">
+                        <td key={header} className="whitespace-nowrap px-5 py-4 text-xs">
                           {String(row[header] ?? "")}
                         </td>
                       ))}

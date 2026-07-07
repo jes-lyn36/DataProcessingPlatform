@@ -20,15 +20,23 @@ def _public_status(job_status):
   return job_status
 
 
-def _format_elapsed(started_at):
+def _format_duration(started_at, ended_at=None):
   if not started_at:
     return "00:00:00"
 
-  elapsed = timezone.now() - started_at
-  total_seconds = max(int(elapsed.total_seconds()), 0)
+  end = ended_at or timezone.now()
+  total_seconds = max(int((end - started_at).total_seconds()), 0)
   hours, remainder = divmod(total_seconds, 3600)
   minutes, seconds = divmod(remainder, 60)
   return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def _is_terminal_status(job_status):
+  return job_status in (
+    Job.Status.SUCCESS,
+    Job.Status.FAILED,
+    Job.Status.CANCELLED,
+  )
 
 
 def _serialize_job_status(job):
@@ -42,11 +50,15 @@ def _serialize_job_status(job):
     "jobId": str(job.id),
     "status": _public_status(job.status),
     "progress": job.progress,
-    "elapsedTime": _format_elapsed(job.started_at),
+    "elapsedTime": _format_duration(
+      job.started_at,
+      job.completed_at if _is_terminal_status(job.status) else None,
+    ),
     "rowsProcessed": job.rows_processed,
     "totalRows": job.total_rows,
     "partitions": partitions,
     "currentStep": job.current_step or "Waiting to start",
+    "errorMessage": job.error_message or None,
   }
 
 
@@ -236,7 +248,8 @@ class JobCancelView(APIView):
 
     job.status = Job.Status.CANCELLED
     job.current_step = "Job cancelled"
-    job.save(update_fields=["status", "current_step"])
+    job.completed_at = timezone.now()
+    job.save(update_fields=["status", "current_step", "completed_at"])
 
     return Response(
       {

@@ -1,6 +1,7 @@
 import json
 # import logging
 import re
+import regex
 
 from django.conf import settings
 from openai import OpenAI
@@ -57,7 +58,16 @@ FEW_SHOT_MESSAGES = [
   },
 ]
 
-MAX_REGEX_LENGTH = 500
+MAX_REGEX_LENGTH = 300
+TIMEOUT_SECONDS = 0.1
+
+# Adversarial inputs used to detect catastrophic backtracking at match time.
+_BACKTRACK_PROBE_STRINGS = (
+  "a" * 10000,
+  "1" * 10000,
+  "x" * 10000,
+  "a" * 5000 + "!",
+)
 
 
 def _get_client() -> OpenAI:
@@ -95,15 +105,25 @@ def _parse_llm_response(content: str) -> dict:
 
 
 def validate_regex(pattern: str) -> str:
-  if not pattern or not isinstance(pattern, str):
-    raise ValueError("Regex pattern must be a non-empty string")
+  if not pattern.strip():
+    raise ValueError("Regex cannot be empty")
 
   if len(pattern) > MAX_REGEX_LENGTH:
-    raise ValueError("Regex pattern is too long")
+    raise ValueError("Regex is too long")
 
-  # re.compile(pattern) turns a regex string into a compiled regex object 
-  # and raises an error if the string isn’t valid regex syntax.
-  re.compile(pattern)
+  try:
+    re.compile(pattern)
+  except re.error as exc:
+    raise ValueError(f"Invalid regex syntax: {exc}")
+
+  # Run the pattern against adversarial inputs with a hard timeout. If any
+  # match exceeds the budget, the pattern is prone to backtracking.
+  try:
+    for test_input in _BACKTRACK_PROBE_STRINGS:
+      regex.search(pattern, test_input, timeout=TIMEOUT_SECONDS)
+  except TimeoutError:
+    raise ValueError("Regex may cause catastrophic backtracking")
+
   return pattern
 
 

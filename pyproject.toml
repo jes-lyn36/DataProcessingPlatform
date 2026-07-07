@@ -14,4 +14,5 @@ dependencies = [
     "pandas>=2.2.0",
     "pyspark==3.5.4",
     "redis>=8.0.1",
+    "regex>=2024.5.15",
 ]

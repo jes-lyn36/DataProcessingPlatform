@@ -155,6 +155,14 @@ CELERY_RESULT_BACKEND = os.environ.get(
     os.environ.get("CELERY_BACKEND", CELERY_BROKER_URL),
 )
 
+# Task retry policy for background jobs (see jobs.tasks.process_job)
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_TASK_RETRY_MAX = int(os.environ.get("CELERY_TASK_RETRY_MAX", 3))
+CELERY_TASK_RETRY_BACKOFF_MAX = int(
+    os.environ.get("CELERY_TASK_RETRY_BACKOFF_MAX", 300)
+)
+
 # Redis DB 1 — Django cache (LLM-generated regex patterns keyed by prompt)
 REDIS_CACHE_URL = os.environ.get("REDIS_CACHE_URL", "redis://redis:6379/1")
 REGEX_CACHE_TTL = int(os.environ.get("REGEX_CACHE_TTL", 60 * 60 * 24))  # 24 hours

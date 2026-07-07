@@ -5,6 +5,7 @@ redis
 django-vite>=3.1.0
 djangorestframework>=3.17.1
 openai>=1.0.0
+regex>=2024.5.15
 pyspark==3.5.4
 pandas>=2.2.0
 openpyxl>=3.1.0

@@ -7,10 +7,11 @@ import {
 } from "lucide-react";
 
 import ProcessedInfoCard from "../Components/ProcessedInfoCard";
+import JobErrorAlert from "../Components/JobErrorAlert";
 import { cancelJob, fetchJobStatus } from "../api/jobs";
 import { formatNumber, isActiveStatus, STATUS_STYLES } from "../utils/format";
 
-const POLL_INTERVAL_MS = 1000;
+const POLL_INTERVAL_MS = 200;
 
 export default function JobStatus({ jobId, onJobUpdated }) {
   const [job, setJob] = useState(null);
@@ -146,6 +147,8 @@ export default function JobStatus({ jobId, onJobUpdated }) {
         </p>
       )}
 
+      <JobErrorAlert message={job?.errorMessage} />
+
       {job && (
         <>
           {job.currentStep && (
@@ -168,9 +171,13 @@ export default function JobStatus({ jobId, onJobUpdated }) {
 
           <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
             <ProcessedInfoCard
-              title="Elapsed Time"
+              title="Processing Time"
               value={job.elapsedTime}
-              subtitle="Since job started"
+              subtitle={
+                isActiveStatus(job.status)
+                  ? "Since job started"
+                  : "Total time to complete"
+              }
               icon={<Clock3 className="h-6 w-6 text-indigo-600" />}
             />
 
