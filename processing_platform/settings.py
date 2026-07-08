@@ -216,8 +216,12 @@ if os.getenv('BUCKET_NAME'):
                 'secret_key': os.getenv('BUCKET_SECRET_KEY'),
                 'use_ssl': True,
             }
-        }
+        },
+        'staticfiles': {
+            'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+        },
     }
+
     MEDIA_URL = f"{os.getenv('BUCKET_ENDPOINT')}/{os.getenv('BUCKET_NAME')}/"
 else:
     # Fallback to local storage for local dev
