@@ -1,8 +1,8 @@
 {
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/:path*",
-      "destination": "https://dataprocessingplatform-production.up.railway.app/api/:path*"
+      "src": "/api/(.*)",
+      "dest": "https://dataprocessingplatform-production.up.railway.app/api/$1"
     }
   ]
 }
