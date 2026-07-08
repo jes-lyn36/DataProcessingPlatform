@@ -16,11 +16,16 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.views.generic import TemplateView
+
+# Serve the React SPA shell for all non-API, non-admin routes so that
+# client-side routing (React Router / direct URL access) works correctly.
+spa_view = TemplateView.as_view(template_name="Main.html")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("jobs.urls")),
-    path('main/', TemplateView.as_view(template_name='Main.html'))
+    # Catch-all: any path not matched above serves the React SPA shell.
+    re_path(r"^.*$", spa_view, name="spa"),
 ]
