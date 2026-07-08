@@ -1,8 +1,9 @@
 import csv
 import io
+import uuid
 
 from celery import current_app
-from django.http import FileResponse
+from django.http import FileResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -12,6 +13,11 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from .models import Job
+from .s3_utils import (
+  generate_presigned_download_url,
+  generate_presigned_upload_url,
+  is_s3_storage_configured,
+)
 from .tasks import process_job
 
 
@@ -115,14 +121,8 @@ class JobCollectionView(APIView):
     )
 
   def post(self, request):
-    file = request.FILES.get("file")
+    file_key = request.data.get("fileKey")
     prompt = request.data.get("prompt")
-
-    if not file:
-      return Response(
-        {"error": "file is required"},
-        status=status.HTTP_400_BAD_REQUEST,
-      )
 
     if not prompt:
       return Response(
@@ -130,11 +130,29 @@ class JobCollectionView(APIView):
         status=status.HTTP_400_BAD_REQUEST,
       )
 
-    job = Job.objects.create(
-      uploaded_file=file,
-      natural_language_instruction=prompt,
-      status=Job.Status.QUEUED,
-    )
+    if file_key:
+      # File was already uploaded directly to S3 via a presigned URL;
+      # just point the job at the existing object (no re-upload).
+      job = Job(
+        natural_language_instruction=prompt,
+        status=Job.Status.QUEUED,
+      )
+      job.uploaded_file.name = file_key
+      job.save()
+    else:
+      file = request.FILES.get("file")
+
+      if not file:
+        return Response(
+          {"error": "file is required"},
+          status=status.HTTP_400_BAD_REQUEST,
+        )
+
+      job = Job.objects.create(
+        uploaded_file=file,
+        natural_language_instruction=prompt,
+        status=Job.Status.QUEUED,
+      )
 
     async_result = process_job.delay(str(job.id))
     job.celery_task_id = async_result.id
@@ -146,6 +164,35 @@ class JobCollectionView(APIView):
         "status": job.status,
       },
       status=status.HTTP_202_ACCEPTED,
+    )
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class JobPresignedUploadView(APIView):
+  def post(self, request):
+    if not is_s3_storage_configured():
+      return Response(
+        {"error": "Direct upload is not available; S3 storage is not configured"},
+        status=status.HTTP_400_BAD_REQUEST,
+      )
+
+    file_name = request.data.get("fileName")
+    content_type = request.data.get("contentType") or "application/octet-stream"
+
+    if not file_name:
+      return Response(
+        {"error": "fileName is required"},
+        status=status.HTTP_400_BAD_REQUEST,
+      )
+
+    safe_name = file_name.rsplit("/", 1)[-1]
+    key = f"uploads/{uuid.uuid4()}_{safe_name}"
+
+    upload_url = generate_presigned_upload_url(key, content_type=content_type)
+
+    return Response(
+      {"uploadUrl": upload_url, "key": key},
+      status=status.HTTP_200_OK,
     )
 
 
@@ -231,6 +278,11 @@ class JobDownloadView(APIView):
       )
 
     filename = job.processed_file.name.rsplit("/", 1)[-1]
+
+    if is_s3_storage_configured():
+      url = generate_presigned_download_url(job.processed_file.name, filename)
+      return HttpResponseRedirect(url)
+
     return FileResponse(
       job.processed_file.open("rb"),
       as_attachment=True,

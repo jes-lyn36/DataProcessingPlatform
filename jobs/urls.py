@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
   JobCollectionView,
+  JobPresignedUploadView,
   JobStatusView,
   JobResultsView,
   JobDownloadView,
@@ -11,6 +12,13 @@ urlpatterns = [
   # GET /api/jobs/
   # POST /api/jobs/
   path("jobs/", JobCollectionView.as_view(), name="jobs"),
+
+  # POST /api/jobs/presigned-upload/
+  path(
+    "jobs/presigned-upload/",
+    JobPresignedUploadView.as_view(),
+    name="job-presigned-upload",
+  ),
 
   # GET /api/jobs/<job_id>/
   path("jobs/<uuid:job_id>/", JobStatusView.as_view(), name="job-status"),
