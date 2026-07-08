@@ -12,21 +12,23 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 import os
+from urllib.parse import urlparse
+import dj_database_url
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    raise RuntimeError("DJANGO_SECRET_KEY must be set")
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
+DEBUG_RAW = os.environ.get("DEBUG")
+if DEBUG_RAW is None:
+    DEBUG = False
+else:
+    DEBUG = DEBUG_RAW.lower() in ("1", "true", "yes", "on")
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-s^sr2x2pxbkzemxe!2wzedurxs7bkwl22##*udgtz0f*r1m3&q"
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
+_allowed_hosts_raw = os.environ.get("DJANGO_ALLOWED_HOSTS", "").strip()
+ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_raw.split(",") if h.strip()]
 
 
 # Application definition
@@ -78,7 +80,12 @@ WSGI_APPLICATION = "processing_platform.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-if os.environ.get("POSTGRES_HOST"):
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+if DATABASE_URL:
+    DATABASES = {
+        "default": dj_database_url.parse(DATABASE_URL, conn_max_age=60),
+    }
+elif os.environ.get("POSTGRES_HOST"):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
@@ -146,9 +153,25 @@ DJANGO_VITE = {
 }
 
 # Redis DB 0 — Celery message broker and result backend
+def _redis_db_url(redis_url: str, db: int) -> str:
+    parsed = urlparse(redis_url)
+    base = redis_url
+    if parsed.scheme and parsed.netloc:
+        base = f"{parsed.scheme}://{parsed.netloc}"
+        if parsed.query:
+            return f"{base}/{db}?{parsed.query}"
+        return f"{base}/{db}"
+    return redis_url
+
+
+REDIS_URL = os.environ.get("REDIS_URL")
+
 CELERY_BROKER_URL = os.environ.get(
     "CELERY_BROKER_URL",
-    os.environ.get("CELERY_BROKER", "redis://redis:6379/0"),
+    os.environ.get(
+        "CELERY_BROKER",
+        _redis_db_url(REDIS_URL, 0) if REDIS_URL else "",
+    ),
 )
 CELERY_RESULT_BACKEND = os.environ.get(
     "CELERY_RESULT_BACKEND",
@@ -164,7 +187,10 @@ CELERY_TASK_RETRY_BACKOFF_MAX = int(
 )
 
 # Redis DB 1 — Django cache (LLM-generated regex patterns keyed by prompt)
-REDIS_CACHE_URL = os.environ.get("REDIS_CACHE_URL", "redis://redis:6379/1")
+REDIS_CACHE_URL = os.environ.get(
+    "REDIS_CACHE_URL",
+    _redis_db_url(REDIS_URL, 1) if REDIS_URL else "",
+)
 REGEX_CACHE_TTL = int(os.environ.get("REGEX_CACHE_TTL", 60 * 60 * 24))  # 24 hours
 
 CACHES = {
@@ -181,3 +207,17 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+
+if not DEBUG:
+    if not ALLOWED_HOSTS:
+        raise RuntimeError("DJANGO_ALLOWED_HOSTS must be set when DEBUG=0")
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL must be set when DEBUG=0")
+    if not CELERY_BROKER_URL or not CELERY_RESULT_BACKEND:
+        raise RuntimeError(
+            "CELERY_BROKER_URL/CELERY_RESULT_BACKEND (or REDIS_URL) must be set when DEBUG=0"
+        )
+    if not REDIS_CACHE_URL:
+        raise RuntimeError("REDIS_CACHE_URL (or REDIS_URL) must be set when DEBUG=0")
+    if not OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY must be set when DEBUG=0")
