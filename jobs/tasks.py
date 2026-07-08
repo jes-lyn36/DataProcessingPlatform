@@ -122,6 +122,29 @@ def _read_dataframe(spark, file_path: str):
   raise ValueError("Unsupported file format. Upload a CSV or Excel file.")
 
 
+def _copy_field_file_to_temp_path(field_file) -> Path:
+  suffix = Path(field_file.name).suffix
+  temp_file = tempfile.NamedTemporaryFile(
+    prefix="uploaded_",
+    suffix=suffix,
+    delete=False,
+  )
+  temp_path = Path(temp_file.name)
+
+  try:
+    with temp_file:
+      field_file.open("rb")
+      try:
+        shutil.copyfileobj(field_file, temp_file)
+      finally:
+        field_file.close()
+  except Exception:
+    temp_path.unlink(missing_ok=True)
+    raise
+
+  return temp_path
+
+
 def _apply_regex(df, pattern: str, replacement: str, target_columns: list[str]):
   columns_to_process = _resolve_target_columns(df.columns, target_columns)
 
@@ -274,86 +297,90 @@ def _run_with_progress_tracking(
 
 
 def _process_uploaded_file(job: Job, spark, llm_result: dict) -> None:
-  input_path = job.uploaded_file.path
-  pattern = llm_result["regex"]
-  replacement = llm_result.get("replacement", "")
-  target_columns = llm_result.get("target_columns") or []
-
-  current_step = "Parsing uploaded file"
-  job.current_step = current_step
-  job.progress = 10
-  job.save(update_fields=["current_step", "progress"])
-
-  df = _read_dataframe(spark, input_path)
-  total_rows = df.count()
-  df, total_partitions = _repartition_for_row_count(df, total_rows)
-
-  current_step = "Applying regex replacement"
-  job.total_rows = total_rows
-  job.total_partitions = total_partitions
-  job.rows_processed = 0
-  job.partitions_processed = 0
-  job.progress = 20
-  job.current_step = current_step
-  job.save(
-    update_fields=[
-      "total_rows",
-      "total_partitions",
-      "rows_processed",
-      "partitions_processed",
-      "progress",
-      "current_step",
-    ]
-  )
-
-  processed_df = _apply_regex(df, pattern, replacement, target_columns)
-  rows_processed, partitions_processed, processed_df = _run_with_progress_tracking(
-    job.id,
-    spark,
-    processed_df,
-    total_rows,
-    total_partitions,
-    current_step,
-  )
-
-  current_step = "Writing processed file"
-  job.rows_processed = rows_processed
-  job.partitions_processed = partitions_processed
-  job.current_step = current_step
-  job.save(
-    update_fields=[
-      "rows_processed",
-      "partitions_processed",
-      "current_step",
-    ]
-  )
-
-  output_path, temp_dir = _write_dataframe_to_csv(processed_df, str(job.id))
-  processed_df.unpersist()
+  input_path = _copy_field_file_to_temp_path(job.uploaded_file)
 
   try:
-    original_name = job.uploaded_file.name.rsplit("/", 1)[-1]
-    stem = original_name.rsplit(".", 1)[0]
-    output_name = f"{stem}_processed.csv"
+    pattern = llm_result["regex"]
+    replacement = llm_result.get("replacement", "")
+    target_columns = llm_result.get("target_columns") or []
 
-    with open(output_path, "rb") as processed_file:
-      job.processed_file.save(output_name, File(processed_file), save=False)
+    current_step = "Parsing uploaded file"
+    job.current_step = current_step
+    job.progress = 10
+    job.save(update_fields=["current_step", "progress"])
+
+    df = _read_dataframe(spark, str(input_path))
+    total_rows = df.count()
+    df, total_partitions = _repartition_for_row_count(df, total_rows)
+
+    current_step = "Applying regex replacement"
+    job.total_rows = total_rows
+    job.total_partitions = total_partitions
+    job.rows_processed = 0
+    job.partitions_processed = 0
+    job.progress = 20
+    job.current_step = current_step
+    job.save(
+      update_fields=[
+        "total_rows",
+        "total_partitions",
+        "rows_processed",
+        "partitions_processed",
+        "progress",
+        "current_step",
+      ]
+    )
+
+    processed_df = _apply_regex(df, pattern, replacement, target_columns)
+    rows_processed, partitions_processed, processed_df = _run_with_progress_tracking(
+      job.id,
+      spark,
+      processed_df,
+      total_rows,
+      total_partitions,
+      current_step,
+    )
+
+    current_step = "Writing processed file"
+    job.rows_processed = rows_processed
+    job.partitions_processed = partitions_processed
+    job.current_step = current_step
+    job.save(
+      update_fields=[
+        "rows_processed",
+        "partitions_processed",
+        "current_step",
+      ]
+    )
+
+    output_path, temp_dir = _write_dataframe_to_csv(processed_df, str(job.id))
+    processed_df.unpersist()
+
+    try:
+      original_name = job.uploaded_file.name.rsplit("/", 1)[-1]
+      stem = original_name.rsplit(".", 1)[0]
+      output_name = f"{stem}_processed.csv"
+
+      with open(output_path, "rb") as processed_file:
+        job.processed_file.save(output_name, File(processed_file), save=False)
+    finally:
+      shutil.rmtree(temp_dir, ignore_errors=True)
+
+    job.progress = 100
+    job.status = Job.Status.SUCCESS
+    job.current_step = "Completed"
+    job.completed_at = timezone.now()
+    job.save(
+      update_fields=[
+        "processed_file",
+        "progress",
+        "status",
+        "current_step",
+        "completed_at",
+      ]
+    )
   finally:
-    shutil.rmtree(temp_dir, ignore_errors=True)
-
-  job.progress = 100
-  job.status = Job.Status.SUCCESS
-  job.current_step = "Completed"
-  job.completed_at = timezone.now()
-  job.save(
-    update_fields=[
-      "processed_file",
-      "progress",
-      "status",
-      "current_step",
-      "completed_at",
-    ]
-  )
+    input_path.unlink(missing_ok=True)
 
 
 def _mark_job_failed(job: Job, exc: Exception) -> None:

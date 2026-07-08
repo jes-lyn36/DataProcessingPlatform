@@ -1,4 +1,5 @@
 import csv
+import io
 
 from celery import current_app
 from django.http import FileResponse
@@ -77,22 +78,29 @@ def _serialize_job_summary(job):
   }
 
 
-def _read_csv_page(file_path, page, page_size, total_rows):
+def _read_csv_page(file_field, page, page_size, total_rows):
   start = (page - 1) * page_size
   end = start + page_size
   headers = []
   rows = []
 
-  with open(file_path, newline="", encoding="utf-8") as csv_file:
-    reader = csv.DictReader(csv_file)
-    headers = reader.fieldnames or []
+  file_field.open("rb")
+  try:
+    csv_file = io.TextIOWrapper(file_field, encoding="utf-8", newline="")
+    try:
+      reader = csv.DictReader(csv_file)
+      headers = reader.fieldnames or []
 
-    for index, row in enumerate(reader):
-      if index < start:
-        continue
-      if index >= end:
-        break
-      rows.append(dict(row))
+      for index, row in enumerate(reader):
+        if index < start:
+          continue
+        if index >= end:
+          break
+        rows.append(dict(row))
+    finally:
+      csv_file.detach()
+  finally:
+    file_field.close()
 
   return headers, rows, total_rows
 
@@ -176,12 +184,11 @@ class JobResultsView(APIView):
         status=status.HTTP_200_OK,
       )
 
-    file_path = job.processed_file.path
     total_rows = job.total_rows
 
-    if file_path.lower().endswith(".csv"):
+    if job.processed_file.name.lower().endswith(".csv"):
       headers, rows, total_rows = _read_csv_page(
-        file_path,
+        job.processed_file,
         page,
         page_size,
         total_rows,
