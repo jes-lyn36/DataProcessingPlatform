@@ -203,8 +203,26 @@ CACHES = {
 }
 
 # This is where uploaded files are stored
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+if os.getenv('BUCKET_NAME'):
+    # Use S3 storage in production
+    STORAGES = {
+        'default': {
+            'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',
+            'OPTIONS': {
+                'bucket_name': os.getenv('BUCKET_NAME'),
+                'region_name': os.getenv('BUCKET_REGION'),
+                'endpoint_url': os.getenv('BUCKET_ENDPOINT'),
+                'access_key': os.getenv('BUCKET_ACCESS_KEY'),
+                'secret_key': os.getenv('BUCKET_SECRET_KEY'),
+                'use_ssl': True,
+            }
+        }
+    }
+    MEDIA_URL = f"{os.getenv('BUCKET_ENDPOINT')}/{os.getenv('BUCKET_NAME')}/"
+else:
+    # Fallback to local storage for local dev
+    MEDIA_ROOT = BASE_DIR / "media"
+    MEDIA_URL = "/media/"
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
