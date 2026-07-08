@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "vite build",
+    "build:vercel": "vite build --config vite.config.vercel.js",
     "dev": "vite dev"
   },
   "keywords": [],
