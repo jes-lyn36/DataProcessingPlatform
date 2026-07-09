@@ -84,6 +84,10 @@ def _serialize_job_summary(job):
   }
 
 
+# NOTE: this always scans from row 0, since plain CSV has no random access to a
+# given row. For large files/high page numbers, a byte-offset checkpoint index
+# (built once when the processed file is written) would let this seek() near the
+# target row instead of re-parsing every row before it on each request.
 def _read_csv_page(file_field, page, page_size, total_rows):
   start = (page - 1) * page_size
   end = start + page_size
