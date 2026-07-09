@@ -2,6 +2,8 @@
 
 A Django + React web application for uploading CSV or Excel files, converting natural-language pattern descriptions into regex via an LLM, and applying replacements at scale using Celery, Redis, and PySpark. Large uploads/downloads bypass the web process entirely via presigned S3 URLs when object storage is configured.
 
+**Video demo**: https://drive.google.com/file/d/1aCiYw04Vgg51jq6Gf8UdPFpXrs8_PvI0/view?usp=drivesdk
+
 ## Setup & run instructions (local development)
 
 ### Prerequisites
@@ -286,6 +288,7 @@ Smaller deliberate simplifications, called out here rather than given their own 
 
 | Decision | Why | Tradeoff |
 |----------|-----|----------|
+| Single shared Postgres database for all Django web replicas and Celery workers | One source of truth for job status, progress, and metadata — any web instance can serve polls and any worker can update the same `Job` row without sync logic | Every replica hits the same DB; progress polling during large jobs means frequent `UPDATE`s on the same rows, and scaling out web/worker replicas increases connection load on one Postgres instance (mitigated on Railway by using the managed Postgres connection string, but still a shared bottleneck under heavy concurrent load) |
 | Progress is reported via direct Postgres writes to the `Job` row (`_update_job_progress` in `jobs/tasks.py`), not Celery's `update_state`/task state | One typed, persistent source of truth with richer fields (rows/partitions/step) than Celery's transient `meta` dict; no dependency on the result backend's TTL; the polling API just reads the same `Job` row used everywhere else | Deviates from reporting progress "via Celery state updates surfaced through the polling API"; `celery_task_id` is only used for cancellation (`current_app.control.revoke`), never for status |
 | LLM regex cache is keyed only by the normalized prompt, not by the uploaded file's schema (`jobs/regex_cache.py`) | Identical prompts skip repeat LLM calls, saving cost and latency | Reusing the same prompt across files with different column names can hit a cached `target_columns` value that doesn't exist in the new file, raising a `ValueError` instead of transparently regenerating |
 | Presigned URL expiry: 600 s for uploads, 300 s for downloads (`jobs/s3_utils.py`) | Limits how long a signed URL remains usable if leaked | A very large upload over a slow connection could expire mid-transfer and need to be retried from the UI |

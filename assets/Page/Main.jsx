@@ -26,7 +26,7 @@ function App() {
       <div className="mx-auto">
         <header className="mb-5">
           <h1 className="text-2xl font-bold leading-tight text-slate-900">
-            Regex Pattern Processor
+            Processing Platform
           </h1>
           <p className="mt-1 text-sm leading-snug text-slate-500">
             Upload datasets, describe replacements in natural language, and
